@@ -1,26 +1,92 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@page {
+  size: A4 landscape;
+  margin: 8mm 6mm 8mm 6mm;
+}
+
+.report-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.report-table th, .report-table td {
+  border: 1px solid #000000;
+  padding: 2px 3.5px;
+  vertical-align: middle;
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+}
+
+.report-table th {
+  background-color: #f3f4f6 !important;
+  font-weight: 700;
+  text-align: center;
+  color: #111827;
+}
+
+/* Prevent table header and footer from automatically repeating on page 2 */
+.report-table thead {
+  display: table-row-group !important;
+}
+
+.report-table tfoot {
+  display: table-row-group !important;
+}
+
+/* Ensure background color is printed on print and pdf export */
+.weekend-row, .weekend-row td {
+  background-color: #9ca3af !important;
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+}
+
+.holiday-row, .holiday-row td {
+  background-color: #fca5a5 !important;
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+}
+
+@media print {
+  html, body {
+    background: white !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .sheet-page {
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    min-height: auto !important;
+  }
+
+  /* Table rules for print */
+  .report-table thead {
+    display: table-row-group !important;
+  }
+
+  .report-table tfoot {
+    display: table-row-group !important;
+  }
+
+  .signature-box-container {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
 }
