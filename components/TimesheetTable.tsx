@@ -6,8 +6,9 @@ interface TimesheetTableProps {
   period: string; // YYYY-MM
   config: TimesheetConfig;
   records: Record<string, DayRecord>;
-  onSelectDay: (dateStr: string) => void;
-  selectedDate: string;
+  onSelectDay: (dateStr: string, e?: React.MouseEvent) => void;
+  selectedDate?: string;
+  selectedDates?: string[];
 }
 
 interface TimesheetDayItem {
@@ -32,7 +33,7 @@ interface TimesheetDayItem {
 }
 
 export const TimesheetTable = React.forwardRef<HTMLDivElement, TimesheetTableProps>(
-  ({ period, config, records, onSelectDay, selectedDate }, ref) => {
+  ({ period, config, records, onSelectDay, selectedDate, selectedDates }, ref) => {
     const [yearStr, monthStr] = period.split('-');
     const year = parseInt(yearStr, 10);
     const month = parseInt(monthStr, 10);
@@ -172,12 +173,15 @@ export const TimesheetTable = React.forwardRef<HTMLDivElement, TimesheetTablePro
     );
 
     const renderDayRow = (d: TimesheetDayItem) => {
-      const isSelected = d.dateKey === selectedDate;
+      const isSelected = selectedDates ? selectedDates.includes(d.dateKey) : d.dateKey === selectedDate;
       let rowBg = '';
       let rowClass = '';
       if (d.isWeekend || d.isCustomHoliday) {
-        rowBg = '#9ca3af'; // Exact greyed out shade matching weekends / holidays
+        rowBg = '#a6a6a6'; // Pure neutral grey matching Excel template
         rowClass = 'weekend-row';
+        if (isSelected) {
+          rowClass += ' selected-row';
+        }
       } else if (isSelected) {
         rowClass = 'selected-row';
       }
@@ -185,21 +189,28 @@ export const TimesheetTable = React.forwardRef<HTMLDivElement, TimesheetTablePro
       return (
         <tr
           key={d.dateKey}
-          onClick={() => onSelectDay(d.dateKey)}
+          onClick={(e) => onSelectDay(d.dateKey, e)}
           className={`${rowClass} hover:opacity-90 transition-opacity`}
           style={{
-            backgroundColor: rowBg || 'transparent',
             cursor: 'pointer',
           }}
-          title="Click to edit activity"
+          title="Click to select | Ctrl+Click to toggle | Shift+Click for range"
         >
-          <td className="font-bold text-center" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.dateDisplay}</td>
-          <td className="text-center font-mono" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{formatTime(d.startTime)}</td>
+          <td className="font-bold text-center select-none" style={{ border: '1px solid #000000', backgroundColor: isSelected ? undefined : (rowBg || undefined) }}>
+            <span
+              className="pdf-hide inline-block mr-1 text-[10px] text-blue-600 font-normal align-middle select-none"
+              data-html2canvas-ignore="true"
+            >
+              {isSelected ? '☑' : '☐'}
+            </span>
+            {d.dateDisplay}
+          </td>
+          <td className="text-center font-mono" style={{ border: '1px solid #000000', backgroundColor: isSelected ? undefined : (rowBg || undefined) }}>{formatTime(d.startTime)}</td>
           <td
             className="text-center font-mono"
             style={{
               border: '1px solid #000000',
-              backgroundColor: d.missingCheckout ? '#fecaca' : (rowBg || undefined),
+              backgroundColor: d.missingCheckout ? '#fecaca' : (isSelected ? undefined : (rowBg || undefined)),
               color: d.missingCheckout ? '#b91c1c' : undefined,
               fontWeight: d.missingCheckout ? 'bold' : 'normal',
             }}
@@ -213,23 +224,23 @@ export const TimesheetTable = React.forwardRef<HTMLDivElement, TimesheetTablePro
               formatTime(d.endTime)
             )}
           </td>
-          <td className="text-center font-mono" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>
+          <td className="text-center font-mono" style={{ border: '1px solid #000000', backgroundColor: isSelected ? undefined : (rowBg || undefined) }}>
             {d.missingCheckout ? '-' : formatHour(d.totalHour)}
           </td>
-          <td className="text-center font-bold" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.status === 'P' ? 'P' : ''}</td>
-          <td className="text-center font-bold" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.status === 'S' ? 'S' : ''}</td>
-          <td className="text-center font-bold" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.status === 'BT' ? 'BT' : ''}</td>
-          <td className="text-center font-bold" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.status === 'PM' ? 'PM' : ''}</td>
-          <td className="text-center font-bold" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.status === 'V' ? 'V' : ''}</td>
-          <td className="text-center font-bold" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.status === 'X' ? 'X' : ''}</td>
-          <td className="text-left whitespace-pre-line leading-tight px-1.5" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.activity}</td>
-          <td className="text-center font-bold" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.projectName}</td>
-          <td className="text-center whitespace-pre-line leading-tight" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.projectId}</td>
-          <td className="text-center" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.app}</td>
-          <td className="text-center whitespace-pre-line leading-tight" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.aip}</td>
-          <td className="text-center" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.divisi}</td>
-          <td className="text-center" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.dept}</td>
-          <td className="text-center" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.subDept}</td>
+          <td className="text-center font-bold" style={{ border: '1px solid #000000', backgroundColor: isSelected ? undefined : (rowBg || undefined) }}>{d.status === 'P' ? 'P' : ''}</td>
+          <td className="text-center font-bold" style={{ border: '1px solid #000000', backgroundColor: isSelected ? undefined : (rowBg || undefined) }}>{d.status === 'S' ? 'S' : ''}</td>
+          <td className="text-center font-bold" style={{ border: '1px solid #000000', backgroundColor: isSelected ? undefined : (rowBg || undefined) }}>{d.status === 'BT' ? 'BT' : ''}</td>
+          <td className="text-center font-bold" style={{ border: '1px solid #000000', backgroundColor: isSelected ? undefined : (rowBg || undefined) }}>{d.status === 'PM' ? 'PM' : ''}</td>
+          <td className="text-center font-bold" style={{ border: '1px solid #000000', backgroundColor: isSelected ? undefined : (rowBg || undefined) }}>{d.status === 'V' ? 'V' : ''}</td>
+          <td className="text-center font-bold" style={{ border: '1px solid #000000', backgroundColor: isSelected ? undefined : (rowBg || undefined) }}>{d.status === 'X' ? 'X' : ''}</td>
+          <td className="text-left whitespace-pre-line leading-tight px-1.5" style={{ border: '1px solid #000000', backgroundColor: isSelected ? undefined : (rowBg || undefined) }}>{d.activity}</td>
+          <td className="text-center font-bold" style={{ border: '1px solid #000000', backgroundColor: isSelected ? undefined : (rowBg || undefined) }}>{d.projectName}</td>
+          <td className="text-center whitespace-pre-line leading-tight" style={{ border: '1px solid #000000', backgroundColor: isSelected ? undefined : (rowBg || undefined) }}>{d.projectId}</td>
+          <td className="text-center" style={{ border: '1px solid #000000', backgroundColor: isSelected ? undefined : (rowBg || undefined) }}>{d.app}</td>
+          <td className="text-center whitespace-pre-line leading-tight" style={{ border: '1px solid #000000', backgroundColor: isSelected ? undefined : (rowBg || undefined) }}>{d.aip}</td>
+          <td className="text-center" style={{ border: '1px solid #000000', backgroundColor: isSelected ? undefined : (rowBg || undefined) }}>{d.divisi}</td>
+          <td className="text-center" style={{ border: '1px solid #000000', backgroundColor: isSelected ? undefined : (rowBg || undefined) }}>{d.dept}</td>
+          <td className="text-center" style={{ border: '1px solid #000000', backgroundColor: isSelected ? undefined : (rowBg || undefined) }}>{d.subDept}</td>
         </tr>
       );
     };
@@ -436,7 +447,7 @@ export const TimesheetTable = React.forwardRef<HTMLDivElement, TimesheetTablePro
                 <div className="flex items-center gap-1.5 font-bold">
                   <span
                     className="inline-block w-4 h-3 border border-black"
-                    style={{ backgroundColor: '#9ca3af', printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}
+                    style={{ backgroundColor: '#a6a6a6', printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}
                   ></span>
                   <span>: Holiday</span>
                 </div>

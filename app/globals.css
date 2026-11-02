@@ -60,7 +60,7 @@
 
 /* Ensure background color is printed on print and pdf export */
 .weekend-row, .weekend-row td {
-  background-color: #9ca3af !important;
+  background-color: #a6a6a6 !important;
   -webkit-print-color-adjust: exact !important;
   print-color-adjust: exact !important;
 }
@@ -85,11 +85,25 @@
   background-color: #ffffff !important;
 }
 
+.pdf-export-mode .weekend-row.selected-row,
+.pdf-export-mode .weekend-row.selected-row td {
+  background-color: #a6a6a6 !important;
+}
+
 .pdf-export-mode .sheet-page {
   box-shadow: none !important;
 }
 
+.pdf-export-mode .pdf-hide,
+.pdf-export-mode [data-html2canvas-ignore="true"] {
+  display: none !important;
+}
+
 @media print {
+  .pdf-hide,
+  [data-html2canvas-ignore="true"] {
+    display: none !important;
+  }
   .selected-row, .selected-row td {
     background-color: #ffffff !important;
     background: #ffffff !important;
