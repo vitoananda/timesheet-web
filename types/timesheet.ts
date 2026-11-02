@@ -31,6 +31,7 @@ export interface DayRecord {
   dept?: string;
   subDept?: string;
   isHoliday?: boolean;
+  missingCheckout?: boolean;
 }
 
 export const DEFAULT_CONFIG: TimesheetConfig = {

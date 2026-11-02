@@ -68,24 +68,29 @@ export async function POST(request: Request) {
     }
 
     if (body.type === 'record') {
-      const record = body.record;
+      const { _id, ...recordData } = body.record;
       await db.collection('records').updateOne(
-        { date: record.date },
-        { $set: { ...record, updatedAt: new Date() } },
+        { date: recordData.date },
+        { $set: { ...recordData, updatedAt: new Date() } },
         { upsert: true }
       );
       return NextResponse.json({ success: true, message: 'Record saved to MongoDB Atlas' });
     }
 
     if (body.type === 'batch_records') {
-      const records = body.records; // array of records
-      const bulkOps = records.map((r: any) => ({
-        updateOne: {
-          filter: { date: r.date },
-          update: { $set: { ...r, updatedAt: new Date() } },
-          upsert: true,
-        },
-      }));
+      const records = body.records || [];
+      const bulkOps = records
+        .filter((r: any) => r && r.date)
+        .map((r: any) => {
+          const { _id, ...recordData } = r;
+          return {
+            updateOne: {
+              filter: { date: recordData.date },
+              update: { $set: { ...recordData, updatedAt: new Date() } },
+              upsert: true,
+            },
+          };
+        });
       if (bulkOps.length > 0) {
         await db.collection('records').bulkWrite(bulkOps);
       }

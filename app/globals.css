@@ -5,17 +5,20 @@
     font-family: Arial, Helvetica, sans-serif;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    background-color: #ffffff;
   }
 }
 
+/* Landscape A4 page setup for printing - MUST NOT contain !important per W3C CSS spec */
 @page {
   size: A4 landscape;
-  margin: 8mm 6mm 8mm 6mm;
+  margin: 14mm 8mm 8mm 8mm;
 }
 
 .report-table {
   border-collapse: collapse;
   width: 100%;
+  border: 1px solid #000000;
 }
 
 .report-table th, .report-table td {
@@ -33,13 +36,26 @@
   color: #111827;
 }
 
-/* Prevent table header and footer from automatically repeating on page 2 */
+/* Prevent table header and footer from repeating automatically on page 2 */
 .report-table thead {
   display: table-row-group !important;
 }
 
 .report-table tfoot {
   display: table-row-group !important;
+}
+
+/* Continuous row breaking */
+.report-table tr {
+  page-break-inside: avoid !important;
+  break-inside: avoid !important;
+  border: none !important;
+}
+
+.report-table thead tr {
+  border: none !important;
+  border-top: none !important;
+  border-bottom: none !important;
 }
 
 /* Ensure background color is printed on print and pdf export */
@@ -55,28 +71,94 @@
   print-color-adjust: exact !important;
 }
 
+.sheet-page {
+  background-color: #ffffff !important;
+}
+
+.selected-row, .selected-row td {
+  background-color: #e0f2fe;
+}
+
+/* Ensure pure white background and no shadows during PDF download capture */
+.pdf-export-mode .selected-row,
+.pdf-export-mode .selected-row td {
+  background-color: #ffffff !important;
+}
+
+.pdf-export-mode .sheet-page {
+  box-shadow: none !important;
+}
+
 @media print {
+  .selected-row, .selected-row td {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+  }
+
+  /* Page orientation & uniform margins on all pages */
+  @page {
+    size: A4 landscape;
+    margin: 14mm 8mm 8mm 8mm;
+  }
+
   html, body {
-    background: white !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
     padding: 0 !important;
     margin: 0 !important;
+    width: 100% !important;
+    height: auto !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  .no-print {
+  /* Completely hide all app chrome and containers */
+  .no-print, header, nav, aside {
     display: none !important;
   }
 
-  .sheet-page {
+  /* Strip background color and box shadows from all parent containers */
+  body, main, div:not(.weekend-row):not(.holiday-row) {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Ensure the printed sheet is pure white with zero bleed and fits printable width */
+  #timesheetSheet {
+    background-color: #ffffff !important;
     box-shadow: none !important;
     margin: 0 !important;
     padding: 0 !important;
     width: 100% !important;
-    min-height: auto !important;
+    max-width: 100% !important;
+    min-height: 0 !important;
+    box-sizing: border-box !important;
   }
 
-  /* Table rules for print */
+  /* Force borders to stay closed when rows break across pages */
+  .report-table {
+    border: 1px solid #000000 !important;
+    border-collapse: collapse !important;
+  }
+
+  .report-table th,
+  .report-table td {
+    border: 1px solid #000000 !important;
+  }
+
+  .report-table tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    border: none !important;
+  }
+
+  .report-table thead tr {
+    border: none !important;
+    border-top: none !important;
+    border-bottom: none !important;
+  }
+
   .report-table thead {
     display: table-row-group !important;
   }

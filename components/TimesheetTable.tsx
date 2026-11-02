@@ -10,6 +10,27 @@ interface TimesheetTableProps {
   selectedDate: string;
 }
 
+interface TimesheetDayItem {
+  day: number;
+  dateKey: string;
+  dateDisplay: string;
+  isWeekend: boolean;
+  isCustomHoliday: boolean | undefined;
+  status: string;
+  startTime: string;
+  endTime: string;
+  totalHour: string;
+  activity: string;
+  projectName: string;
+  projectId: string;
+  app: string;
+  aip: string;
+  divisi: string;
+  dept: string;
+  subDept: string;
+  missingCheckout: boolean;
+}
+
 export const TimesheetTable = React.forwardRef<HTMLDivElement, TimesheetTableProps>(
   ({ period, config, records, onSelectDay, selectedDate }, ref) => {
     const [yearStr, monthStr] = period.split('-');
@@ -22,7 +43,7 @@ export const TimesheetTable = React.forwardRef<HTMLDivElement, TimesheetTablePro
 
     let countP = 0, countS = 0, countBT = 0, countPM = 0, countV = 0, countX = 0;
 
-    const days = [];
+    const days: TimesheetDayItem[] = [];
     for (let day = 1; day <= totalDays; day++) {
       const dayStr = String(day).padStart(2, '0');
       const dateKey = `${yearStr}-${monthStr}-${dayStr}`;
@@ -37,9 +58,9 @@ export const TimesheetTable = React.forwardRef<HTMLDivElement, TimesheetTablePro
       const isGreyedOut = isWeekend || !!rec?.isHoliday;
 
       const status = rec?.status !== undefined ? (isGreyedOut && !rec.status ? '' : rec.status) : (isGreyedOut ? '' : 'P');
-      const startTime = isGreyedOut ? '08:00:00' : (rec?.startTime || '08:00:00');
-      const endTime = isGreyedOut ? '17:00:00' : (rec?.endTime || '17:00:00');
-      const totalHour = isGreyedOut ? '09:00:00' : (rec?.totalHour || '09:00:00');
+      const startTime = isGreyedOut && !rec?.startTime ? '08:00:00' : (rec?.startTime || '08:00:00');
+      const endTime = isGreyedOut && !rec?.endTime ? '17:00:00' : (rec?.endTime || '17:00:00');
+      const totalHour = isGreyedOut && !rec?.totalHour ? '09:00:00' : (rec?.totalHour || '09:00:00');
       const activity = rec?.activity || '';
 
       const projectName = isGreyedOut && !activity ? '' : (rec?.projectName || config.rowProjectName);
@@ -75,6 +96,7 @@ export const TimesheetTable = React.forwardRef<HTMLDivElement, TimesheetTablePro
         divisi,
         dept,
         subDept,
+        missingCheckout: !!rec?.missingCheckout,
       });
     }
 
@@ -93,291 +115,410 @@ export const TimesheetTable = React.forwardRef<HTMLDivElement, TimesheetTablePro
       return t;
     };
 
-    return (
-      <div
-        ref={ref}
-        id="timesheetSheet"
-        className="sheet-page bg-white p-6 shadow-xl mx-auto text-black"
-        style={{
-          width: '297mm',
-          minHeight: '210mm',
-          boxSizing: 'border-box',
-          fontFamily: 'Arial, Helvetica, sans-serif',
-        }}
-      >
-        {/* HEADER SECTION EXACT TO TEMPLATE */}
-        <div className="flex justify-between items-start mb-2.5">
-          <div className="text-[9px] leading-tight space-y-0.5">
-            <div className="flex">
-              <span className="w-28 font-bold text-slate-900">NAME of PROJECT</span>
-              <span className="font-bold">: {config.projectName}</span>
-            </div>
-            <div className="flex">
-              <span className="w-28 font-bold text-slate-900">UNIT/DIVISION</span>
-              <span>: {config.unitDivision}</span>
-            </div>
-            <div className="flex">
-              <span className="w-28 font-bold text-slate-900">NAME</span>
-              <span className="font-bold uppercase">: {config.name}</span>
-            </div>
-            <div className="flex">
-              <span className="w-28 font-bold text-slate-900">MII ID</span>
-              <span>: {config.miiId}</span>
-            </div>
-            <div className="flex items-center gap-8">
-              <div className="flex">
-                <span className="w-28 font-bold text-slate-900">SITE</span>
-                <span>: {config.site}</span>
-              </div>
-              <div className="flex items-center gap-1.5 font-bold">
-                <span className="inline-block w-4 h-3 bg-red-400 border border-slate-700"></span>
-                <span>: Holiday</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-4 pt-0.5">
-              <div className="flex">
-                <span className="w-28 font-bold text-slate-900">PERIODE</span>
-                <span className="font-bold">{periodLabel}</span>
-              </div>
-              <div className="text-[8px] text-slate-700 italic">
-                P = Present; S = Sick; V = Vacation; BT = Business Trip; PM = Permit; X = Not Working Anymore
-              </div>
-            </div>
-          </div>
+    const page1Days = days.slice(0, 25);
+    const page2Days = days.slice(25);
 
-          {/* EXACT METRODATA LOGO IN HEADER */}
-          <div className="flex flex-col items-end pr-2 pt-1">
-            <MetrodataLogo />
-          </div>
-        </div>
+    // Exact proportional column widths: Total = 1080px (fits 297mm landscape sheet with p-6)
+    const colGroup = (
+      <colgroup>
+        <col style={{ width: '64px' }} />
+        <col style={{ width: '40px' }} />
+        <col style={{ width: '40px' }} />
+        <col style={{ width: '44px' }} />
+        <col style={{ width: '36px' }} />
+        <col style={{ width: '26px' }} />
+        <col style={{ width: '44px' }} />
+        <col style={{ width: '30px' }} />
+        <col style={{ width: '36px' }} />
+        <col style={{ width: '46px' }} />
+        <col style={{ width: '280px' }} />
+        <col style={{ width: '54px' }} />
+        <col style={{ width: '46px' }} />
+        <col style={{ width: '52px' }} />
+        <col style={{ width: '96px' }} />
+        <col style={{ width: '36px' }} />
+        <col style={{ width: '52px' }} />
+        <col style={{ width: '58px' }} />
+      </colgroup>
+    );
 
-        {/* EXACT TABLE TEMPLATE WITH PRECISE COLUMN PROPORTIONS */}
-        <table
-          className="report-table"
+    const tableHeader = (
+      <thead>
+        <tr>
+          <th rowSpan={2} style={{ width: '64px', border: '1px solid #000000', backgroundColor: '#f3f4f6', fontWeight: 'bold', textAlign: 'center', padding: '2px 2px' }}>DATE</th>
+          <th colSpan={2} style={{ width: '80px', border: '1px solid #000000', backgroundColor: '#f3f4f6', fontWeight: 'bold', textAlign: 'center', padding: '2px 2px' }}>WORKING HOUR</th>
+          <th rowSpan={2} style={{ width: '44px', border: '1px solid #000000', backgroundColor: '#f3f4f6', fontWeight: 'bold', textAlign: 'center', padding: '2px 2px' }}>TOTAL<br />HOUR</th>
+          <th colSpan={6} style={{ width: '218px', border: '1px solid #000000', backgroundColor: '#f3f4f6', fontWeight: 'bold', textAlign: 'center', padding: '2px 2px' }}>STATUS ATTENDANCE</th>
+          <th rowSpan={2} style={{ width: '280px', border: '1px solid #000000', backgroundColor: '#f3f4f6', fontWeight: 'bold', textAlign: 'center', padding: '2px 2px' }}>ACTIVITY / REMARK</th>
+          <th rowSpan={2} style={{ width: '54px', border: '1px solid #000000', backgroundColor: '#f3f4f6', fontWeight: 'bold', textAlign: 'center', padding: '2px 2px' }}>Project Name</th>
+          <th rowSpan={2} style={{ width: '46px', border: '1px solid #000000', backgroundColor: '#f3f4f6', fontWeight: 'bold', textAlign: 'center', padding: '2px 2px' }}>Project ID</th>
+          <th rowSpan={2} style={{ width: '52px', border: '1px solid #000000', backgroundColor: '#f3f4f6', fontWeight: 'bold', textAlign: 'center', padding: '2px 2px' }}>Aplikasi<br />Terdampak</th>
+          <th rowSpan={2} style={{ width: '96px', border: '1px solid #000000', backgroundColor: '#f3f4f6', fontWeight: 'bold', textAlign: 'center', padding: '2px 2px' }}>AIP Fitur</th>
+          <th rowSpan={2} style={{ width: '36px', border: '1px solid #000000', backgroundColor: '#f3f4f6', fontWeight: 'bold', textAlign: 'center', padding: '2px 2px' }}>Divisi</th>
+          <th rowSpan={2} style={{ width: '52px', border: '1px solid #000000', backgroundColor: '#f3f4f6', fontWeight: 'bold', textAlign: 'center', padding: '2px 2px' }}>Departement</th>
+          <th rowSpan={2} style={{ width: '58px', border: '1px solid #000000', backgroundColor: '#f3f4f6', fontWeight: 'bold', textAlign: 'center', padding: '2px 2px' }}>Sub<br />Departement</th>
+        </tr>
+        <tr>
+          <th style={{ width: '40px', border: '1px solid #000000', backgroundColor: '#f3f4f6', fontWeight: 'bold', textAlign: 'center', padding: '2px 2px' }}>START</th>
+          <th style={{ width: '40px', border: '1px solid #000000', backgroundColor: '#f3f4f6', fontWeight: 'bold', textAlign: 'center', padding: '2px 2px' }}>END</th>
+          <th style={{ width: '36px', border: '1px solid #000000', backgroundColor: '#f3f4f6', fontWeight: 'bold', textAlign: 'center', padding: '2px 2px' }}>Present</th>
+          <th style={{ width: '26px', border: '1px solid #000000', backgroundColor: '#f3f4f6', fontWeight: 'bold', textAlign: 'center', padding: '2px 2px' }}>Sick</th>
+          <th style={{ width: '44px', border: '1px solid #000000', backgroundColor: '#f3f4f6', fontWeight: 'bold', textAlign: 'center', padding: '2px 2px' }}>Business<br />Trip</th>
+          <th style={{ width: '30px', border: '1px solid #000000', backgroundColor: '#f3f4f6', fontWeight: 'bold', textAlign: 'center', padding: '2px 2px' }}>Permit</th>
+          <th style={{ width: '36px', border: '1px solid #000000', backgroundColor: '#f3f4f6', fontWeight: 'bold', textAlign: 'center', padding: '2px 2px' }}>Vacation</th>
+          <th style={{ width: '46px', border: '1px solid #000000', backgroundColor: '#f3f4f6', fontWeight: 'bold', textAlign: 'center', padding: '2px 2px' }}>Not<br />Working</th>
+        </tr>
+      </thead>
+    );
+
+    const renderDayRow = (d: TimesheetDayItem) => {
+      const isSelected = d.dateKey === selectedDate;
+      let rowBg = '';
+      let rowClass = '';
+      if (d.isWeekend || d.isCustomHoliday) {
+        rowBg = '#9ca3af'; // Exact greyed out shade matching weekends / holidays
+        rowClass = 'weekend-row';
+      } else if (isSelected) {
+        rowClass = 'selected-row';
+      }
+
+      return (
+        <tr
+          key={d.dateKey}
+          onClick={() => onSelectDay(d.dateKey)}
+          className={`${rowClass} hover:opacity-90 transition-opacity`}
           style={{
+            backgroundColor: rowBg || 'transparent',
+            cursor: 'pointer',
+          }}
+          title="Click to edit activity"
+        >
+          <td className="font-bold text-center" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.dateDisplay}</td>
+          <td className="text-center font-mono" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{formatTime(d.startTime)}</td>
+          <td
+            className="text-center font-mono"
+            style={{
+              border: '1px solid #000000',
+              backgroundColor: d.missingCheckout ? '#fecaca' : (rowBg || undefined),
+              color: d.missingCheckout ? '#b91c1c' : undefined,
+              fontWeight: d.missingCheckout ? 'bold' : 'normal',
+            }}
+            title={d.missingCheckout ? 'Missing Check-Out Time! Click to edit' : undefined}
+          >
+            {d.missingCheckout ? (
+              <span className="inline-block px-1 py-0.5 rounded bg-red-100 text-red-700 text-[7px] font-bold">
+                MISSING
+              </span>
+            ) : (
+              formatTime(d.endTime)
+            )}
+          </td>
+          <td className="text-center font-mono" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>
+            {d.missingCheckout ? '-' : formatHour(d.totalHour)}
+          </td>
+          <td className="text-center font-bold" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.status === 'P' ? 'P' : ''}</td>
+          <td className="text-center font-bold" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.status === 'S' ? 'S' : ''}</td>
+          <td className="text-center font-bold" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.status === 'BT' ? 'BT' : ''}</td>
+          <td className="text-center font-bold" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.status === 'PM' ? 'PM' : ''}</td>
+          <td className="text-center font-bold" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.status === 'V' ? 'V' : ''}</td>
+          <td className="text-center font-bold" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.status === 'X' ? 'X' : ''}</td>
+          <td className="text-left whitespace-pre-line leading-tight px-1.5" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.activity}</td>
+          <td className="text-center font-bold" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.projectName}</td>
+          <td className="text-center whitespace-pre-line leading-tight" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.projectId}</td>
+          <td className="text-center" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.app}</td>
+          <td className="text-center whitespace-pre-line leading-tight" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.aip}</td>
+          <td className="text-center" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.divisi}</td>
+          <td className="text-center" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.dept}</td>
+          <td className="text-center" style={{ border: '1px solid #000000', backgroundColor: rowBg || undefined }}>{d.subDept}</td>
+        </tr>
+      );
+    };
+
+    const tableFooter = (
+      <tfoot>
+        <tr className="font-bold bg-white text-center" style={{ height: '20px' }}>
+          <td colSpan={4} className="text-right pr-2" style={{ border: '1px solid #000000' }}>TOTAL</td>
+          <td style={{ border: '1px solid #000000' }}>{countP}</td>
+          <td style={{ border: '1px solid #000000' }}>{countS}</td>
+          <td style={{ border: '1px solid #000000' }}>{countBT}</td>
+          <td style={{ border: '1px solid #000000' }}>{countPM}</td>
+          <td style={{ border: '1px solid #000000' }}>{countV}</td>
+          <td style={{ border: '1px solid #000000' }}>{countX}</td>
+          <td className="text-left font-normal italic pl-2 text-slate-500" style={{ border: '1px solid #000000' }}></td>
+          <td style={{ border: '1px solid #000000' }}></td>
+          <td colSpan={6} style={{ border: '1px solid #000000' }}></td>
+        </tr>
+      </tfoot>
+    );
+
+    // Signature box spanning the first 10 columns with balanced equal widths (136px each, total = 408px)
+    const signatureSection = (
+      <div className="signature-box-container mt-6" style={{ width: '408px' }}>
+        <table
+          style={{
+            width: '408px',
             borderCollapse: 'collapse',
-            width: '100%',
             fontSize: '8px',
-            lineHeight: 1.15,
+            fontFamily: 'Arial, Helvetica, sans-serif',
+            border: '1px solid #000000',
+            tableLayout: 'fixed',
           }}
         >
+          <colgroup>
+            <col style={{ width: '136px' }} />
+            <col style={{ width: '136px' }} />
+            <col style={{ width: '136px' }} />
+          </colgroup>
           <thead>
-            <tr>
-              <th rowSpan={2} style={{ width: '58px' }}>DATE</th>
-              <th colSpan={2} style={{ width: '78px' }}>WORKING HOUR</th>
-              <th rowSpan={2} style={{ width: '48px' }}>TOTAL<br />HOUR</th>
-              <th colSpan={6}>STATUS ATTENDANCE</th>
-              <th rowSpan={2} style={{ width: '275px' }}>ACTIVITY / REMARK</th>
-              <th rowSpan={2} style={{ width: '58px' }}>Project Name</th>
-              <th rowSpan={2} style={{ width: '48px' }}>Project ID</th>
-              <th rowSpan={2} style={{ width: '54px' }}>Aplikasi<br />Terdampak</th>
-              <th rowSpan={2} style={{ width: '100px' }}>AIP Fitur</th>
-              <th rowSpan={2} style={{ width: '38px' }}>Divisi</th>
-              <th rowSpan={2} style={{ width: '54px' }}>Departement</th>
-              <th rowSpan={2} style={{ width: '64px' }}>Sub<br />Departement</th>
-            </tr>
-            <tr>
-              <th style={{ width: '39px' }}>START</th>
-              <th style={{ width: '39px' }}>END</th>
-              <th style={{ width: '25px' }}>Present</th>
-              <th style={{ width: '25px' }}>Sick</th>
-              <th style={{ width: '30px' }}>Business<br />Trip</th>
-              <th style={{ width: '25px' }}>Permit</th>
-              <th style={{ width: '26px' }}>Vacation</th>
-              <th style={{ width: '30px' }}>Not<br />Working</th>
+            <tr style={{ height: '22px' }}>
+              <th
+                style={{
+                  width: '136px',
+                  border: '1px solid #000000',
+                  textAlign: 'center',
+                  padding: '2px 4px',
+                  fontWeight: 'bold',
+                  backgroundColor: '#ffffff',
+                  verticalAlign: 'middle',
+                }}
+              >
+                TTD PEGAWAI,
+              </th>
+              <th
+                style={{
+                  width: '136px',
+                  border: '1px solid #000000',
+                  textAlign: 'center',
+                  padding: '2px 4px',
+                  fontWeight: 'bold',
+                  backgroundColor: '#ffffff',
+                  verticalAlign: 'middle',
+                }}
+              >
+                DI PERIKSA OLEH,
+              </th>
+              <th
+                style={{
+                  width: '136px',
+                  border: '1px solid #000000',
+                  textAlign: 'center',
+                  padding: '2px 4px',
+                  fontWeight: 'bold',
+                  backgroundColor: '#ffffff',
+                  verticalAlign: 'middle',
+                }}
+              >
+                DISETUJUI OLEH,
+              </th>
             </tr>
           </thead>
           <tbody>
-            {days.map((d) => {
-              const isSelected = d.dateKey === selectedDate;
-              let rowBg = '';
-              let rowClass = '';
-              if (d.isWeekend || d.isCustomHoliday) {
-                rowBg = '#9ca3af'; // Exact greyed out shade matching weekends / holidays
-                rowClass = 'weekend-row';
-              } else if (isSelected) {
-                rowBg = '#e0f2fe';
-              }
-
-              return (
-                <tr
-                  key={d.dateKey}
-                  onClick={() => onSelectDay(d.dateKey)}
-                  className={`${rowClass} hover:opacity-90 transition-opacity`}
-                  style={{
-                    backgroundColor: rowBg || 'transparent',
-                    cursor: 'pointer',
-                  }}
-                  title="Click to edit activity"
-                >
-                  <td className="font-bold text-center" style={{ backgroundColor: rowBg || undefined }}>{d.dateDisplay}</td>
-                  <td className="text-center font-mono" style={{ backgroundColor: rowBg || undefined }}>{formatTime(d.startTime)}</td>
-                  <td className="text-center font-mono" style={{ backgroundColor: rowBg || undefined }}>{formatTime(d.endTime)}</td>
-                  <td className="text-center font-mono" style={{ backgroundColor: rowBg || undefined }}>{formatHour(d.totalHour)}</td>
-                  <td className="text-center font-bold" style={{ backgroundColor: rowBg || undefined }}>{d.status === 'P' ? 'P' : ''}</td>
-                  <td className="text-center font-bold" style={{ backgroundColor: rowBg || undefined }}>{d.status === 'S' ? 'S' : ''}</td>
-                  <td className="text-center font-bold" style={{ backgroundColor: rowBg || undefined }}>{d.status === 'BT' ? 'BT' : ''}</td>
-                  <td className="text-center font-bold" style={{ backgroundColor: rowBg || undefined }}>{d.status === 'PM' ? 'PM' : ''}</td>
-                  <td className="text-center font-bold" style={{ backgroundColor: rowBg || undefined }}>{d.status === 'V' ? 'V' : ''}</td>
-                  <td className="text-center font-bold" style={{ backgroundColor: rowBg || undefined }}>{d.status === 'X' ? 'X' : ''}</td>
-                  <td className="text-left whitespace-pre-line leading-tight px-1.5" style={{ backgroundColor: rowBg || undefined }}>{d.activity}</td>
-                  <td className="text-center font-bold" style={{ backgroundColor: rowBg || undefined }}>{d.projectName}</td>
-                  <td className="text-center whitespace-pre-line leading-tight" style={{ backgroundColor: rowBg || undefined }}>{d.projectId}</td>
-                  <td className="text-center" style={{ backgroundColor: rowBg || undefined }}>{d.app}</td>
-                  <td className="text-center whitespace-pre-line leading-tight" style={{ backgroundColor: rowBg || undefined }}>{d.aip}</td>
-                  <td className="text-center" style={{ backgroundColor: rowBg || undefined }}>{d.divisi}</td>
-                  <td className="text-center" style={{ backgroundColor: rowBg || undefined }}>{d.dept}</td>
-                  <td className="text-center" style={{ backgroundColor: rowBg || undefined }}>{d.subDept}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-          <tfoot>
-            <tr className="font-bold bg-white text-center">
-              <td colSpan={4} className="text-right pr-2">TOTAL</td>
-              <td>{countP}</td>
-              <td>{countS}</td>
-              <td>{countBT}</td>
-              <td>{countPM}</td>
-              <td>{countV}</td>
-              <td>{countX}</td>
-              <td className="text-left font-normal italic pl-2 text-slate-500"></td>
-              <td></td>
-              <td colSpan={6}></td>
+            {/* Row for signature space with names at bottom */}
+            <tr style={{ height: '85px' }}>
+              <td
+                style={{
+                  width: '136px',
+                  border: '1px solid #000000',
+                  textAlign: 'center',
+                  verticalAlign: 'bottom',
+                  paddingBottom: '4px',
+                  fontWeight: 'normal',
+                }}
+              >
+                ( {config.sig1 || config.name} )
+              </td>
+              <td
+                style={{
+                  width: '136px',
+                  border: '1px solid #000000',
+                  textAlign: 'center',
+                  verticalAlign: 'bottom',
+                  paddingBottom: '4px',
+                  fontWeight: 'normal',
+                }}
+              >
+                ( {config.sig2} )
+              </td>
+              <td
+                style={{
+                  width: '136px',
+                  border: '1px solid #000000',
+                  textAlign: 'center',
+                  verticalAlign: 'bottom',
+                  paddingBottom: '4px',
+                  fontWeight: 'normal',
+                }}
+              >
+                ( {config.sig3} )
+              </td>
             </tr>
-          </tfoot>
+            {/* Row for Date */}
+            <tr style={{ height: '20px' }}>
+              <td
+                style={{
+                  width: '136px',
+                  border: '1px solid #000000',
+                  textAlign: 'left',
+                  padding: '2px 4px',
+                  verticalAlign: 'middle',
+                  fontWeight: 'normal',
+                }}
+              >
+                DATE : {endPeriodDisplay}
+              </td>
+              <td
+                style={{
+                  width: '136px',
+                  border: '1px solid #000000',
+                  textAlign: 'left',
+                  padding: '2px 4px',
+                  verticalAlign: 'middle',
+                  fontWeight: 'normal',
+                }}
+              >
+                DATE : {endPeriodDisplay}
+              </td>
+              <td
+                style={{
+                  width: '136px',
+                  border: '1px solid #000000',
+                  textAlign: 'left',
+                  padding: '2px 4px',
+                  verticalAlign: 'middle',
+                  fontWeight: 'normal',
+                }}
+              >
+                DATE : {endPeriodDisplay}
+              </td>
+            </tr>
+          </tbody>
         </table>
+      </div>
+    );
 
-        {/* EXACT SIGNATURE BOX SECTION MATCHING EXCEL & PDF TEMPLATE */}
-        <div className="signature-box-container mt-6" style={{ width: '420px' }}>
+    return (
+      <div ref={ref} id="timesheetContainer" className="flex flex-col gap-8 print:gap-0">
+        {/* ================= PAGE 1 ================= */}
+        <div
+          id="timesheetPage1"
+          className="sheet-page bg-white p-6 shadow-xl mx-auto text-black print:p-0 print:m-0 print:shadow-none print:w-full print:border-none print:break-after-page"
+          style={{
+            width: '297mm',
+            minHeight: '210mm',
+            boxSizing: 'border-box',
+            fontFamily: 'Arial, Helvetica, sans-serif',
+          }}
+        >
+          {/* HEADER SECTION EXACT TO TEMPLATE */}
+          <div className="flex justify-between items-start mb-2.5">
+            <div className="text-[9px] leading-tight space-y-0.5">
+              <div className="flex">
+                <span className="w-28 font-bold text-slate-900">NAME of PROJECT</span>
+                <span className="font-bold">: {config.projectName}</span>
+              </div>
+              <div className="flex">
+                <span className="w-28 font-bold text-slate-900">UNIT/DIVISION</span>
+                <span>: {config.unitDivision}</span>
+              </div>
+              <div className="flex">
+                <span className="w-28 font-bold text-slate-900">NAME</span>
+                <span className="font-bold uppercase">: {config.name}</span>
+              </div>
+              <div className="flex">
+                <span className="w-28 font-bold text-slate-900">MII ID</span>
+                <span>: {config.miiId}</span>
+              </div>
+              <div className="flex items-center gap-8">
+                <div className="flex">
+                  <span className="w-28 font-bold text-slate-900">SITE</span>
+                  <span>: {config.site}</span>
+                </div>
+                <div className="flex items-center gap-1.5 font-bold">
+                  <span
+                    className="inline-block w-4 h-3 border border-black"
+                    style={{ backgroundColor: '#9ca3af', printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}
+                  ></span>
+                  <span>: Holiday</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 pt-0.5">
+                <div className="flex">
+                  <span className="w-28 font-bold text-slate-900">PERIODE</span>
+                  <span className="font-bold">{periodLabel}</span>
+                </div>
+                <div className="text-[8px] text-slate-700 italic">
+                  P = Present; S = Sick; V = Vacation; BT = Business Trip; PM = Permit; X = Not Working Anymore
+                </div>
+              </div>
+            </div>
+
+            {/* EXACT METRODATA LOGO IN HEADER */}
+            <div className="flex flex-col items-end pr-2 pt-1">
+              <MetrodataLogo />
+            </div>
+          </div>
+
+          {/* EXACT TABLE TEMPLATE WITH PRECISE COLUMN PROPORTIONS */}
           <table
+            className="report-table"
             style={{
-              width: '100%',
               borderCollapse: 'collapse',
+              width: '100%',
               fontSize: '8px',
-              fontFamily: 'Arial, Helvetica, sans-serif',
+              lineHeight: 1.15,
+              tableLayout: 'fixed',
               border: '1px solid #000000',
             }}
           >
-            <thead>
-              <tr style={{ height: '22px' }}>
-                <th
-                  style={{
-                    width: '33.33%',
-                    border: '1px solid #000000',
-                    textAlign: 'left',
-                    padding: '2px 4px',
-                    fontWeight: 'bold',
-                    backgroundColor: '#ffffff',
-                    verticalAlign: 'top',
-                  }}
-                >
-                  TTD PEGAWAI,
-                </th>
-                <th
-                  style={{
-                    width: '33.33%',
-                    border: '1px solid #000000',
-                    textAlign: 'left',
-                    padding: '2px 4px',
-                    fontWeight: 'bold',
-                    backgroundColor: '#ffffff',
-                    verticalAlign: 'top',
-                  }}
-                >
-                  DI PERIKSA OLEH,
-                </th>
-                <th
-                  style={{
-                    width: '33.33%',
-                    border: '1px solid #000000',
-                    textAlign: 'left',
-                    padding: '2px 4px',
-                    fontWeight: 'bold',
-                    backgroundColor: '#ffffff',
-                    verticalAlign: 'top',
-                  }}
-                >
-                  DISETUJUI OLEH,
-                </th>
-              </tr>
-            </thead>
+            {colGroup}
+            {tableHeader}
             <tbody>
-              {/* Row for signature space with names at bottom */}
-              <tr style={{ height: '55px' }}>
-                <td
-                  style={{
-                    border: '1px solid #000000',
-                    textAlign: 'center',
-                    verticalAlign: 'bottom',
-                    paddingBottom: '4px',
-                    fontWeight: 'normal',
-                  }}
-                >
-                  ( {config.sig1 || config.name} )
-                </td>
-                <td
-                  style={{
-                    border: '1px solid #000000',
-                    textAlign: 'center',
-                    verticalAlign: 'bottom',
-                    paddingBottom: '4px',
-                    fontWeight: 'normal',
-                  }}
-                >
-                  ( {config.sig2} )
-                </td>
-                <td
-                  style={{
-                    border: '1px solid #000000',
-                    textAlign: 'center',
-                    verticalAlign: 'bottom',
-                    paddingBottom: '4px',
-                    fontWeight: 'normal',
-                  }}
-                >
-                  ( {config.sig3} )
-                </td>
-              </tr>
-              {/* Row for Date */}
-              <tr style={{ height: '20px' }}>
-                <td
-                  style={{
-                    border: '1px solid #000000',
-                    textAlign: 'left',
-                    padding: '2px 4px',
-                    verticalAlign: 'middle',
-                    fontWeight: 'normal',
-                  }}
-                >
-                  DATE : {endPeriodDisplay}
-                </td>
-                <td
-                  style={{
-                    border: '1px solid #000000',
-                    textAlign: 'left',
-                    padding: '2px 4px',
-                    verticalAlign: 'middle',
-                    fontWeight: 'normal',
-                  }}
-                >
-                  DATE : {endPeriodDisplay}
-                </td>
-                <td
-                  style={{
-                    border: '1px solid #000000',
-                    textAlign: 'left',
-                    padding: '2px 4px',
-                    verticalAlign: 'middle',
-                    fontWeight: 'normal',
-                  }}
-                >
-                  DATE : {endPeriodDisplay}
-                </td>
-              </tr>
+              {page1Days.map(renderDayRow)}
             </tbody>
+            {page2Days.length === 0 && tableFooter}
           </table>
+
+          {page2Days.length === 0 && signatureSection}
         </div>
+
+        {/* ================= PAGE 2 (if remaining days exist) ================= */}
+        {page2Days.length > 0 && (
+          <div
+            id="timesheetPage2"
+            className="sheet-page bg-white p-6 shadow-xl mx-auto text-black print:p-0 print:m-0 print:shadow-none print:w-full print:border-none"
+            style={{
+              width: '297mm',
+              minHeight: '210mm',
+              boxSizing: 'border-box',
+              fontFamily: 'Arial, Helvetica, sans-serif',
+            }}
+          >
+            {/* CLEAN 14mm TOP SPACING REQUESTED BY USER */}
+            <div style={{ height: '14mm' }} />
+
+            {/* TABLE FOR REMAINING DAYS WITH HEADER + FOOTER */}
+            <table
+              className="report-table"
+              style={{
+                borderCollapse: 'collapse',
+                width: '100%',
+                fontSize: '8px',
+                lineHeight: 1.15,
+                tableLayout: 'fixed',
+                border: '1px solid #000000',
+              }}
+            >
+              {colGroup}
+              <tbody>
+                {page2Days.map(renderDayRow)}
+              </tbody>
+              {tableFooter}
+            </table>
+
+            {/* SIGNATURE SECTION MATCHING FIRST 10 COLUMNS OF THE TABLE */}
+            {signatureSection}
+          </div>
+        )}
       </div>
     );
   }

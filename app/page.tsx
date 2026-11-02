@@ -13,10 +13,14 @@ import {
   Save,
   Clock,
   Sparkles,
+  Upload,
+  FileText,
+  AlertCircle,
 } from 'lucide-react';
 import { TimesheetConfig, DayRecord, DEFAULT_CONFIG } from '@/types/timesheet';
 import { TimesheetTable } from '@/components/TimesheetTable';
 import { ConfigModal } from '@/components/ConfigModal';
+import { extractAttendanceFromPDF, parseAttendanceText, extractRowsFromExcel } from '@/lib/attendanceParser';
 
 // Sample dataset provided by user for September 2026
 const SAMPLE_SEPTEMBER_2026: Record<string, Partial<DayRecord>> = {
@@ -59,6 +63,8 @@ export default function TimesheetPage() {
   const [records, setRecords] = useState<Record<string, DayRecord>>({});
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [isExtractingAttendance, setIsExtractingAttendance] = useState(false);
+  const [extractStatusMsg, setExtractStatusMsg] = useState('');
   const [saveStatusMsg, setSaveStatusMsg] = useState('');
   const [isMongoConnected, setIsMongoConnected] = useState(false);
 
@@ -71,8 +77,13 @@ export default function TimesheetPage() {
   const [formProjectId, setFormProjectId] = useState('');
   const [formAip, setFormAip] = useState('');
   const [formIsHoliday, setFormIsHoliday] = useState(false);
+  const [formMissingCheckout, setFormMissingCheckout] = useState(false);
+  const [isSavingAll, setIsSavingAll] = useState(false);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | ''>('');
+  const hasUserEdited = useRef(false);
 
   const printAreaRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize data: Load from LocalStorage + attempt MongoDB fetch
   useEffect(() => {
@@ -137,6 +148,7 @@ export default function TimesheetPage() {
       setFormProjectId(rec.projectId || '');
       setFormAip(rec.aip || '');
       setFormIsHoliday(!!rec.isHoliday);
+      setFormMissingCheckout(!!rec.missingCheckout);
     } else {
       setFormStatus(isWeekend ? '' : 'P');
       setFormStart('08:00:00');
@@ -146,8 +158,26 @@ export default function TimesheetPage() {
       setFormProjectId('');
       setFormAip('');
       setFormIsHoliday(false);
+      setFormMissingCheckout(false);
     }
   }, [selectedDate, records]);
+
+  const ID_MONTH_NAMES = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+
+  // Set document.title to formatted filename: Vito Rizqi Ananda_BNI_DEV_TIMESHEET_{MMMM} {YYYY}
+  useEffect(() => {
+    const [yStr, mStr] = period.split('-');
+    const y = parseInt(yStr, 10);
+    const m = parseInt(mStr, 10);
+    const monthName = ID_MONTH_NAMES[m - 1] || 'Oktober';
+    const yearName = y || new Date().getFullYear();
+    const personName = config.sig1 || (config.name ? config.name.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ') : 'Vito Rizqi Ananda');
+    const pdfFileName = `${personName}_BNI_DEV_TIMESHEET_${monthName} ${yearName}`;
+    document.title = pdfFileName;
+  }, [period, config.name, config.sig1]);
 
   // Calculate duration
   const calcHours = (start: string, end: string) => {
@@ -166,6 +196,7 @@ export default function TimesheetPage() {
 
   // Helper to immediately update current day in live records state as well as local storage
   const updateCurrentDayLive = (field: keyof DayRecord, value: any) => {
+    hasUserEdited.current = true;
     setRecords((prev) => {
       const rec = prev[selectedDate] || {
         date: selectedDate,
@@ -180,6 +211,10 @@ export default function TimesheetPage() {
         const s = field === 'startTime' ? value : formStart;
         const e = field === 'endTime' ? value : formEnd;
         updated.totalHour = calcHours(s, e);
+        if (field === 'endTime' && value) {
+          updated.missingCheckout = false;
+          setFormMissingCheckout(false);
+        }
       }
       const newRecs = { ...prev, [selectedDate]: updated };
       localStorage.setItem('ts_records', JSON.stringify(newRecs));
@@ -187,47 +222,165 @@ export default function TimesheetPage() {
     });
   };
 
-  // Save current day to Mongo Atlas & confirm
-  const handleSaveDay = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const totalHour = calcHours(formStart, formEnd);
+  // Auto-save debounced effect: automatically saves to MongoDB Atlas / storage after user stops typing
+  useEffect(() => {
+    if (!hasUserEdited.current) return;
+    if (Object.keys(records).length === 0) return;
 
-    const updatedRecord: DayRecord = {
-      date: selectedDate,
-      startTime: formStart.split(':').length === 2 ? `${formStart}:00` : formStart,
-      endTime: formEnd.split(':').length === 2 ? `${formEnd}:00` : formEnd,
-      totalHour,
-      status: formStatus,
-      activity: formActivity,
-      projectName: formProjectName || undefined,
-      projectId: formProjectId || undefined,
-      aip: formAip || undefined,
-      isHoliday: formIsHoliday,
-    };
+    setAutoSaveStatus('saving');
+    const timer = setTimeout(async () => {
+      try {
+        const recordsList = Object.values(records);
+        const res = await fetch('/api/timesheet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'batch_records', records: recordsList }),
+        });
+        const data = await res.json();
+        if (data?.success) {
+          setIsMongoConnected(true);
+        }
+        setAutoSaveStatus('saved');
+      } catch (err) {
+        setAutoSaveStatus('saved');
+      }
+    }, 700);
 
-    const newRecords = { ...records, [selectedDate]: updatedRecord };
-    setRecords(newRecords);
-    localStorage.setItem('ts_records', JSON.stringify(newRecords));
+    return () => clearTimeout(timer);
+  }, [records]);
 
-    // Save to Mongo Atlas if configured
+  // Save ALL days to MongoDB Atlas & localStorage in one single action
+  const handleSaveAll = async () => {
+    setIsSavingAll(true);
     try {
+      localStorage.setItem('ts_records', JSON.stringify(records));
+      const recordsList = Object.values(records);
       const res = await fetch('/api/timesheet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'record', record: updatedRecord }),
+        body: JSON.stringify({ type: 'batch_records', records: recordsList }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (data?.success) {
         setIsMongoConnected(true);
-        setSaveStatusMsg('Saved to MongoDB Atlas!');
+        setSaveStatusMsg('All records saved to MongoDB Atlas!');
       } else {
-        setSaveStatusMsg('Saved locally');
+        setSaveStatusMsg('All records saved locally!');
       }
-    } catch (err) {
-      setSaveStatusMsg('Saved locally');
+    } catch {
+      setSaveStatusMsg('All records saved locally!');
+    } finally {
+      setIsSavingAll(false);
+      setAutoSaveStatus('saved');
+      setTimeout(() => setSaveStatusMsg(''), 2500);
     }
+  };
 
-    setTimeout(() => setSaveStatusMsg(''), 2000);
+  const handleSaveDay = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    await handleSaveAll();
+  };
+
+  // Handle uploading and parsing attendance file (PDF or Excel/CSV)
+  const handleAttendanceFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsExtractingAttendance(true);
+    setExtractStatusMsg('Extracting attendance data...');
+
+    try {
+      let extractedRows = [];
+      const fileNameLower = file.name.toLowerCase();
+
+      if (fileNameLower.endsWith('.pdf')) {
+        extractedRows = await extractAttendanceFromPDF(file);
+      } else if (fileNameLower.endsWith('.xlsx') || fileNameLower.endsWith('.xls') || fileNameLower.endsWith('.csv')) {
+        extractedRows = await extractRowsFromExcel(file);
+      } else {
+        // Plain text fallback
+        const text = await file.text();
+        extractedRows = parseAttendanceText(text);
+      }
+
+      if (extractedRows.length === 0) {
+        alert('Could not find date/time entries in this file. Please ensure it follows the BNI Laporan Kehadiran Karyawan format.');
+        setIsExtractingAttendance(false);
+        setExtractStatusMsg('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+
+      // Merge extracted rows into records
+      const newRecords = { ...records };
+      let updatedCount = 0;
+      let missingCheckoutCount = 0;
+      let detectedPeriod = '';
+
+      for (const row of extractedRows) {
+        if (!detectedPeriod) {
+          detectedPeriod = row.date.slice(0, 7);
+        }
+
+        const existing = newRecords[row.date] || {};
+
+        if (row.missingCheckout) {
+          missingCheckoutCount++;
+        }
+
+        newRecords[row.date] = {
+          date: row.date,
+          startTime: row.inTime || existing.startTime || '08:00:00',
+          endTime: row.outTime || existing.endTime || (row.missingCheckout ? '' : '17:00:00'),
+          totalHour: (row.inTime && row.outTime) ? calcHours(row.inTime, row.outTime) : (row.missingCheckout ? '' : (existing.totalHour || '09:00:00')),
+          status: row.isHoliday ? '' : (existing.status || 'P'),
+          activity: existing.activity || '',
+          projectName: existing.projectName,
+          projectId: existing.projectId,
+          app: existing.app,
+          aip: existing.aip,
+          divisi: existing.divisi,
+          dept: existing.dept,
+          subDept: existing.subDept,
+          isHoliday: row.isHoliday || existing.isHoliday,
+          missingCheckout: row.missingCheckout,
+        };
+        updatedCount++;
+      }
+
+      // If imported month differs from current month, switch month
+      if (detectedPeriod && detectedPeriod !== period) {
+        setPeriod(detectedPeriod);
+        setSelectedDate(`${detectedPeriod}-01`);
+      }
+
+      setRecords(newRecords);
+      localStorage.setItem('ts_records', JSON.stringify(newRecords));
+
+      // Batch save to MongoDB Atlas if available
+      try {
+        await fetch('/api/timesheet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'batch_records',
+            records: Object.values(newRecords),
+          }),
+        });
+      } catch (err) {
+        console.log('Saved batch locally');
+      }
+
+      const msg = `Extracted ${updatedCount} dates! ${missingCheckoutCount > 0 ? `(${missingCheckoutCount} days missing check-out marked in red)` : ''}`;
+      setExtractStatusMsg(msg);
+      setTimeout(() => setExtractStatusMsg(''), 5000);
+    } catch (err: any) {
+      console.error('File parsing error:', err);
+      alert(`Error extracting file: ${err.message || err}`);
+    } finally {
+      setIsExtractingAttendance(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   // Save global config
@@ -271,34 +424,85 @@ export default function TimesheetPage() {
     setSelectedDate(`${nextP}-01`);
   };
 
-  // Download PDF matching A4 landscape
+  // Download Custom A4 Landscape PDF directly (No browser print dialog, no headers/footers)
   const handleDownloadPdf = async () => {
-    if (!printAreaRef.current) return;
+    const page1 = document.getElementById('timesheetPage1');
+    const page2 = document.getElementById('timesheetPage2');
+    if (!page1) return;
+
     setIsDownloadingPdf(true);
 
     try {
-      const html2pdf = (await import('html2pdf.js')).default;
-      const opt = {
-        margin: [6, 6, 6, 6] as [number, number, number, number],
-        filename: `Timesheet_${config.name.replace(/\s+/g, '_')}_${period}.pdf`,
-        image: { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-        jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'landscape' as const },
-      };
+      const html2canvas = (await import('html2canvas-pro')).default;
+      const { jsPDF } = await import('jspdf');
 
-      await html2pdf().set(opt).from(printAreaRef.current).save();
-    } catch (err) {
-      console.error('PDF generation error:', err);
-      window.print();
+      // Temporarily add export class so selected row prints pure white and no shadows bleed
+      document.body.classList.add('pdf-export-mode');
+
+      // Capture Page 1
+      const canvas1 = await html2canvas(page1, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        scrollY: 0,
+        scrollX: 0,
+      });
+
+      // A4 Landscape is 297mm x 210mm
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      const img1 = canvas1.toDataURL('image/jpeg', 0.98);
+      const h1 = (canvas1.height * 297) / canvas1.width;
+      pdf.addImage(img1, 'JPEG', 0, 0, 297, Math.min(h1, 210), undefined, 'FAST');
+
+      // Capture Page 2 if exists
+      if (page2) {
+        const canvas2 = await html2canvas(page2, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          logging: false,
+          scrollY: 0,
+          scrollX: 0,
+        });
+
+        pdf.addPage('a4', 'landscape');
+        const img2 = canvas2.toDataURL('image/jpeg', 0.98);
+        const h2 = (canvas2.height * 297) / canvas2.width;
+        pdf.addImage(img2, 'JPEG', 0, 0, 297, Math.min(h2, 210), undefined, 'FAST');
+      }
+
+      document.body.classList.remove('pdf-export-mode');
+
+      // Custom filename pattern: Vito Rizqi Ananda_BNI_DEV_TIMESHEET_{MMMM} {YYYY}.pdf
+      const [yStr, mStr] = period.split('-');
+      const y = parseInt(yStr, 10);
+      const m = parseInt(mStr, 10);
+      const monthName = ID_MONTH_NAMES[m - 1] || 'Oktober';
+      const yearName = y || new Date().getFullYear();
+      const personName = config.sig1 || (config.name ? config.name.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ') : 'Vito Rizqi Ananda');
+      const filename = `${personName}_BNI_DEV_TIMESHEET_${monthName} ${yearName}.pdf`;
+
+      pdf.save(filename);
+    } catch (err: any) {
+      document.body.classList.remove('pdf-export-mode');
+      console.error('PDF export error:', err);
+      alert('Could not generate PDF: ' + (err?.message || err));
     } finally {
       setIsDownloadingPdf(false);
     }
   };
 
+
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-100 flex flex-col font-sans print:bg-white print:min-h-0 print:p-0 print:m-0 print:block">
       {/* TOP APP BAR */}
-      <header className="no-print bg-white border-b border-slate-200 sticky top-0 z-40 px-6 py-3 shadow-sm flex flex-wrap items-center justify-between gap-4">
+      <header className="no-print print:hidden bg-white border-b border-slate-200 sticky top-0 z-40 px-6 py-3 shadow-sm flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold shadow-md shadow-blue-500/20">
             <Clock className="w-5 h-5" />
@@ -337,8 +541,43 @@ export default function TimesheetPage() {
           </button>
         </div>
 
+        {/* Extract & Save Status Banner */}
+        {extractStatusMsg && (
+          <div className="no-print mx-6 my-2 p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-800 text-xs font-semibold flex items-center justify-between shadow-sm">
+            <span className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-emerald-600" />
+              {extractStatusMsg}
+            </span>
+            <button
+              onClick={() => setExtractStatusMsg('')}
+              className="text-emerald-700 hover:text-emerald-900 font-bold px-2"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* Action Controls */}
         <div className="flex items-center gap-2">
+          {/* Hidden File Input for Attendance Report */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleAttendanceFileUpload}
+            accept=".pdf,.xlsx,.xls,.csv,.txt"
+            className="hidden"
+          />
+
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isExtractingAttendance}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-lg transition border border-emerald-300 shadow-sm"
+            title="Import in and out dates from BNI Laporan Kehadiran Karyawan (PDF/Excel)"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            {isExtractingAttendance ? 'Extracting...' : 'Extract Attendance File'}
+          </button>
+
           <button
             onClick={() => setIsConfigOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition border border-slate-300"
@@ -347,34 +586,57 @@ export default function TimesheetPage() {
             Repeated Values
           </button>
           <button
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg transition shadow"
+            onClick={handleSaveAll}
+            disabled={isSavingAll}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition shadow-sm cursor-pointer disabled:opacity-60"
+            title="Save all month records to database and local storage"
           >
-            <Printer className="w-3.5 h-3.5" />
-            Print
+            <Save className="w-3.5 h-3.5" />
+            {isSavingAll ? 'Saving All...' : 'Save All'}
           </button>
           <button
             onClick={handleDownloadPdf}
             disabled={isDownloadingPdf}
-            className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition shadow-md shadow-blue-500/25"
+            className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition shadow-md shadow-blue-500/25 cursor-pointer disabled:opacity-60"
+            title="Download PDF directly with custom filename and exact template styling"
           >
             <Download className="w-3.5 h-3.5" />
-            {isDownloadingPdf ? 'Generating...' : 'Download PDF'}
+            {isDownloadingPdf ? 'Generating PDF...' : 'Download PDF'}
+          </button>
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition border border-slate-300 cursor-pointer"
+            title="Print using system/browser printer dialog"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            Print
           </button>
         </div>
       </header>
 
       {/* MAIN LAYOUT */}
-      <main className="flex-1 max-w-[1750px] w-full mx-auto p-4 lg:p-6 grid grid-cols-1 xl:grid-cols-12 gap-6">
+      <main className="flex-1 max-w-[1750px] w-full mx-auto p-4 lg:p-6 grid grid-cols-1 xl:grid-cols-12 gap-6 print:p-0 print:m-0 print:max-w-none print:w-full print:block">
         
         {/* LEFT COLUMN: DAILY ACTIVITY LOGGER FORM */}
-        <div className="no-print xl:col-span-4 space-y-4">
+        <div className="no-print print:hidden xl:col-span-4 space-y-4">
           <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h2 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                <Clock className="w-4 h-4 text-blue-600" />
-                Daily Activity Entry
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-blue-600" />
+                  Daily Activity Entry
+                </h2>
+                {autoSaveStatus === 'saving' && (
+                  <span className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full font-medium animate-pulse">
+                    Saving...
+                  </span>
+                )}
+                {autoSaveStatus === 'saved' && (
+                  <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-full font-medium flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3 text-emerald-600" /> Auto-saved
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -479,32 +741,47 @@ export default function TimesheetPage() {
               </div>
 
               {/* Working Hours */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Start Time</label>
-                  <input
-                    type="time"
-                    step="1"
-                    value={formStart}
-                    onChange={(e) => {
-                      setFormStart(e.target.value);
-                      updateCurrentDayLive('startTime', e.target.value);
-                    }}
-                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">End Time</label>
-                  <input
-                    type="time"
-                    step="1"
-                    value={formEnd}
-                    onChange={(e) => {
-                      setFormEnd(e.target.value);
-                      updateCurrentDayLive('endTime', e.target.value);
-                    }}
-                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
-                  />
+              <div className="space-y-1.5">
+                {formMissingCheckout && (
+                  <div className="flex items-center gap-1.5 p-2 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs">
+                    <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
+                    <span><b>Check-out time missing!</b> Please enter end time manually below.</span>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Start Time (Check-In)</label>
+                    <input
+                      type="time"
+                      step="1"
+                      value={formStart}
+                      onChange={(e) => {
+                        setFormStart(e.target.value);
+                        updateCurrentDayLive('startTime', e.target.value);
+                      }}
+                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center justify-between">
+                      <span>End Time (Check-Out)</span>
+                      {formMissingCheckout && <span className="text-[10px] text-red-600 font-bold">Needs Input</span>}
+                    </label>
+                    <input
+                      type="time"
+                      step="1"
+                      value={formEnd}
+                      onChange={(e) => {
+                        setFormEnd(e.target.value);
+                        updateCurrentDayLive('endTime', e.target.value);
+                      }}
+                      className={`w-full px-3 py-1.5 border rounded-lg text-xs ${
+                        formMissingCheckout && !formEnd
+                          ? 'bg-red-50 border-red-400 focus:outline-red-500 text-red-800'
+                          : 'bg-slate-50 border-slate-200'
+                      }`}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -545,63 +822,62 @@ export default function TimesheetPage() {
                   <input
                     type="text"
                     value={formProjectName}
-                    onChange={(e) => setFormProjectName(e.target.value)}
+                    onChange={(e) => {
+                      setFormProjectName(e.target.value);
+                      updateCurrentDayLive('projectName', e.target.value);
+                    }}
                     placeholder={`Project Name (Default: ${config.rowProjectName})`}
                     className="w-full px-2 py-1 bg-white border border-slate-200 rounded text-xs"
                   />
                   <input
                     type="text"
                     value={formProjectId}
-                    onChange={(e) => setFormProjectId(e.target.value)}
+                    onChange={(e) => {
+                      setFormProjectId(e.target.value);
+                      updateCurrentDayLive('projectId', e.target.value);
+                    }}
                     placeholder={`Project ID (Default: ${config.rowProjectId.replace('\n', ' ')})`}
                     className="w-full px-2 py-1 bg-white border border-slate-200 rounded text-xs"
                   />
                   <input
                     type="text"
                     value={formAip}
-                    onChange={(e) => setFormAip(e.target.value)}
+                    onChange={(e) => {
+                      setFormAip(e.target.value);
+                      updateCurrentDayLive('aip', e.target.value);
+                    }}
                     placeholder={`AIP Fitur (Default: ${config.rowAip.replace('\n', ' ')})`}
                     className="w-full px-2 py-1 bg-white border border-slate-200 rounded text-xs"
                   />
                 </div>
               </details>
 
-              <div className="flex items-center gap-2 pt-2">
+              <div className="space-y-2 pt-2">
                 <button
-                  type="submit"
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/20 transition"
+                  type="button"
+                  onClick={handleSaveAll}
+                  disabled={isSavingAll}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/20 transition cursor-pointer disabled:opacity-60"
                 >
-                  <Save className="w-4 h-4" /> Save Day Activity
+                  <Save className="w-4 h-4" /> {isSavingAll ? 'Saving All...' : 'Save All Timesheet'}
                 </button>
+                <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500">
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Edits save automatically as you type</span>
+                </div>
                 {saveStatusMsg && (
-                  <span className="text-xs text-emerald-600 font-bold flex items-center gap-1">
+                  <div className="text-xs text-emerald-600 font-bold text-center flex items-center justify-center gap-1">
                     <CheckCircle className="w-4 h-4" /> {saveStatusMsg}
-                  </span>
+                  </div>
                 )}
               </div>
             </form>
           </div>
-
-          {/* Configuration status card */}
-          <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm text-xs space-y-2">
-            <h3 className="font-bold text-slate-800 flex items-center gap-1.5">
-              <Database className="w-4 h-4 text-emerald-600" />
-              Storage & Logo Settings
-            </h3>
-            <div className="space-y-1.5 text-slate-600 text-[11px]">
-              <div>
-                <b>Logo file:</b> Place your logo image as <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-blue-600">public/images/logo.png</code>.
-              </div>
-              <div>
-                <b>MongoDB Atlas:</b> Add your URI in <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-emerald-700">.env.local</code> to auto-sync to cloud. Currently: <span className={isMongoConnected ? "text-emerald-600 font-bold" : "text-amber-600 font-medium"}>{isMongoConnected ? "Connected" : "Local Storage Mode"}</span>.
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* RIGHT COLUMN: EXACT TEMPLATE PREVIEW & PDF RENDER */}
-        <div className="xl:col-span-8 overflow-x-auto pb-8">
-          <div className="no-print mb-2 flex items-center justify-between text-xs text-slate-500 px-1">
+        <div className="xl:col-span-8 overflow-x-auto pb-8 print:p-0 print:m-0 print:w-full print:overflow-visible print:block">
+          <div className="no-print print:hidden mb-2 flex items-center justify-between text-xs text-slate-500 px-1">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-slate-700">Preview:</span>
               <span>Exact Excel Template Replica (A4 Landscape)</span>
